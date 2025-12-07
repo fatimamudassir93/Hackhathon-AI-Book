@@ -62,7 +62,6 @@ physical-ai-book/src/context/
 physical-ai-book/src/theme/DocItem/
 physical-ai-book/src/theme/Navbar/
 rag-backend/README.md
-rag-backend/*.py
 rag-backend/*.bat
 rag-backend/*.ps1
 rebotics.jpg
