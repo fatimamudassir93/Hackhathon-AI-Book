@@ -1,18 +1,23 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import ChatbotFilters from './ChatbotFilters';
 import styles from './Chatbot.module.css';
+
+interface Source {
+  chapter: string;
+  title: string;
+  section?: string;
+  score: number;
+  url?: string;
+}
 
 interface Message {
   role: 'user' | 'assistant';
-  content: string;
-  sources?: Array<{
-    text: string;
-    metadata: {
-      chapter?: string;
-      title?: string;
-      heading?: string;
-    };
-  }>;
+  content: string | object;  // Allow content to be string or object for error handling
+  sources?: Source[];
+  citations?: string;
+  in_scope?: boolean;
+  error?: boolean;
 }
 
 interface ChatbotProps {
@@ -32,6 +37,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ apiUrl = 'http://localhost:8000' }) =
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [selectedText, setSelectedText] = useState('');
+  const [chapterFilter, setChapterFilter] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Scroll to bottom when messages change
@@ -57,10 +63,6 @@ const Chatbot: React.FC<ChatbotProps> = ({ apiUrl = 'http://localhost:8000' }) =
   }, []);
 
   const queryRAG = async (userQuery: string, useSelectedText: boolean = false): Promise<any> => {
-    const query = useSelectedText && selectedText
-      ? `Based on this context: "${selectedText}"\n\nQuestion: ${userQuery}`
-      : userQuery;
-
     const headers: Record<string, string> = {
       'Content-Type': 'application/json'
     };
@@ -74,17 +76,26 @@ const Chatbot: React.FC<ChatbotProps> = ({ apiUrl = 'http://localhost:8000' }) =
       method: 'POST',
       headers,
       body: JSON.stringify({
-        message: query,
+        message: userQuery,
         selected_text: useSelectedText ? selectedText : undefined,
+        chapter_filter: chapterFilter,
         use_history: true
       })
     });
 
     if (!response.ok) {
-      throw new Error('Failed to query RAG backend');
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
     }
 
-    return response.json();
+    const data = await response.json();
+
+    // Validate the response structure
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid response format from server');
+    }
+
+    return data;
   };
 
   const handleSend = async (useSelectedText: boolean = false) => {
@@ -106,8 +117,11 @@ const Chatbot: React.FC<ChatbotProps> = ({ apiUrl = 'http://localhost:8000' }) =
       // Create response with answer and sources from new API format
       const assistantMessage: Message = {
         role: 'assistant',
-        content: ragResults.response || 'No answer available.',
-        sources: ragResults.sources || []
+        content: typeof ragResults?.response === 'string' ? ragResults.response : 'No answer available.',
+        sources: Array.isArray(ragResults?.sources) ? ragResults.sources : [],
+        citations: typeof ragResults?.citations === 'string' ? ragResults.citations : '',
+        in_scope: typeof ragResults?.in_scope === 'boolean' ? ragResults.in_scope : true,
+        error: false
       };
 
       setMessages(prev => [...prev, assistantMessage]);
@@ -118,9 +132,28 @@ const Chatbot: React.FC<ChatbotProps> = ({ apiUrl = 'http://localhost:8000' }) =
       }
     } catch (error) {
       console.error('Error querying RAG:', error);
+
+      // Determine error message based on error type
+      let errorContent = 'Sorry, I encountered an error while searching the textbook.';
+
+      if (error instanceof Error) {
+        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+          errorContent = '🔌 Cannot connect to the backend server. Please make sure it\'s running at ' + apiUrl;
+        } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+          errorContent = '🔒 Authentication required. Please sign in to use the chatbot.';
+        } else if (error.message.includes('403') || error.message.includes('Forbidden')) {
+          errorContent = '🚫 Access denied. You may not have permission to use this feature.';
+        } else if (error.message.includes('500')) {
+          errorContent = '⚠️ Server error. The backend encountered an issue. Please try again later.';
+        } else {
+          errorContent = `❌ Error: ${error.message}`;
+        }
+      }
+
       const errorMessage: Message = {
         role: 'assistant',
-        content: 'Sorry, I encountered an error while searching the textbook. Please make sure the backend is running and you are signed in.'
+        content: errorContent,
+        error: true
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
@@ -154,13 +187,20 @@ const Chatbot: React.FC<ChatbotProps> = ({ apiUrl = 'http://localhost:8000' }) =
           {/* Header */}
           <div className={styles.chatHeader}>
             <h3>📚 Ask about the Book</h3>
-            <button
-              className={styles.closeButton}
-              onClick={() => setIsOpen(false)}
-              aria-label="Close chat"
-            >
-              ✕
-            </button>
+            <div className={styles.headerActions}>
+              <ChatbotFilters
+                apiUrl={apiUrl}
+                selectedChapter={chapterFilter}
+                onChapterChange={setChapterFilter}
+              />
+              <button
+                className={styles.closeButton}
+                onClick={() => setIsOpen(false)}
+                aria-label="Close chat"
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
           {/* Messages */}
@@ -185,21 +225,45 @@ const Chatbot: React.FC<ChatbotProps> = ({ apiUrl = 'http://localhost:8000' }) =
             )}
 
             {messages.map((msg, idx) => (
-              <div key={idx} className={`${styles.message} ${styles[msg.role]}`}>
+              <div
+                key={idx}
+                className={`${styles.message} ${styles[msg.role]} ${msg.error ? styles.error : ''}`}
+              >
                 <div className={styles.messageContent}>
-                  {msg.content}
+                  {typeof msg.content === 'string'
+                    ? msg.content
+                    : JSON.stringify(msg.content, null, 2) || 'No content available'}
                 </div>
+                {msg.in_scope === false && (
+                  <div className={styles.outOfScopeNote}>
+                    ℹ️ This question appears to be outside the textbook's scope.
+                  </div>
+                )}
                 {msg.sources && msg.sources.length > 0 && (
                   <div className={styles.sources}>
                     <strong>📖 Sources:</strong>
                     <ul>
                       {msg.sources.map((source, i) => (
                         <li key={i}>
-                          {source.metadata.chapter && `${source.metadata.chapter} - `}
-                          {source.metadata.heading || source.metadata.title}
+                          <span className={styles.sourceChapter}>{source.chapter}</span>
+                          {source.section && (
+                            <> - <span className={styles.sourceSection}>{source.section}</span></>
+                          )}
+                          <div className={styles.sourceTitle}>{source.title}</div>
+                          <span className={styles.sourceScore}>
+                            (relevance: {(source.score * 100).toFixed(0)}%)
+                          </span>
                         </li>
                       ))}
                     </ul>
+                  </div>
+                )}
+                {msg.citations && (
+                  <div className={styles.citations}>
+                    <details>
+                      <summary>View Citations</summary>
+                      <pre>{msg.citations}</pre>
+                    </details>
                   </div>
                 )}
               </div>

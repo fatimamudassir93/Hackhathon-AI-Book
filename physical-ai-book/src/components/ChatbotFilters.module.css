@@ -1,0 +1,244 @@
+.filtersContainer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.filterToggle {
+  padding: 0.5rem 0.75rem;
+  background: var(--ifm-color-primary);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition: all 0.2s ease;
+}
+
+.filterToggle:hover {
+  background: var(--ifm-color-primary-dark);
+  transform: translateY(-1px);
+}
+
+.activeIndicator {
+  color: #4ade80;
+  font-size: 0.5rem;
+  margin-left: 0.25rem;
+}
+
+.filterPanel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 0.5rem;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  width: 280px;
+  max-height: 400px;
+  overflow: hidden;
+  z-index: 1000;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.filterHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.filterHeader h4 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.closeFilter {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.closeFilter:hover {
+  background: #e5e7eb;
+  color: #1f2937;
+}
+
+.filterContent {
+  padding: 0.5rem;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.chapterList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.chapterOption {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  text-align: left;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.chapterOption:hover {
+  background: #f3f4f6;
+  border-color: var(--ifm-color-primary);
+}
+
+.chapterOption.selected {
+  background: #eff6ff;
+  border-color: var(--ifm-color-primary);
+  font-weight: 500;
+}
+
+.chapterIcon {
+  font-size: 1rem;
+}
+
+.checkmark {
+  margin-left: auto;
+  color: var(--ifm-color-primary);
+  font-weight: bold;
+}
+
+.loadingState,
+.errorState,
+.emptyState {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+.errorState p {
+  margin: 0 0 0.5rem 0;
+  color: #ef4444;
+}
+
+.retryButton {
+  padding: 0.5rem 1rem;
+  background: var(--ifm-color-primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.retryButton:hover {
+  background: var(--ifm-color-primary-dark);
+}
+
+.emptyState small {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+.activeFilterBadge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  background: #eff6ff;
+  border: 1px solid var(--ifm-color-primary);
+  border-radius: 20px;
+  font-size: 0.75rem;
+  color: #1e40af;
+  font-weight: 500;
+}
+
+.clearFilterButton {
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.clearFilterButton:hover {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .filterPanel {
+    background: #1f2937;
+    border-color: #374151;
+  }
+
+  .filterHeader {
+    background: #111827;
+    border-bottom-color: #374151;
+  }
+
+  .filterHeader h4 {
+    color: #f9fafb;
+  }
+
+  .chapterOption {
+    background: #1f2937;
+    border-color: #374151;
+    color: #f9fafb;
+  }
+
+  .chapterOption:hover {
+    background: #374151;
+  }
+
+  .chapterOption.selected {
+    background: #1e3a8a;
+    border-color: var(--ifm-color-primary);
+  }
+}
