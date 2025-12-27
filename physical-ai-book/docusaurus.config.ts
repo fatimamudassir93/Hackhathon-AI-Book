@@ -1,5 +1,5 @@
-import {themes as prismThemes} from 'prism-react-renderer';
-import type {Config} from '@docusaurus/types';
+import { themes as prismThemes } from 'prism-react-renderer';
+import type { Config } from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
@@ -11,10 +11,12 @@ const config: Config = {
     v4: true,
   },
 
-  // Vercel URL (production domain)
-  url: 'https://hackhathon-ai-book-tkm1.vercel.app',
+  // ✅ Vercel-compatible URL handling
+  url: process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : 'http://localhost:3000',
 
-  // MUST be "/" on Vercel
+  // ✅ MUST be "/" for Vercel
   baseUrl: '/',
 
   organizationName: 'fatimamudassir93',
@@ -73,7 +75,7 @@ const config: Config = {
           position: 'left',
           label: 'Chapters',
         },
-        {to: '/blog', label: 'Blog', position: 'left'},
+        { to: '/blog', label: 'Blog', position: 'left' },
         {
           href: 'https://github.com/fatimamudassir93/Hackhathon-AI-Book',
           label: 'GitHub',
@@ -96,15 +98,15 @@ const config: Config = {
         {
           title: 'Community',
           items: [
-            {label: 'Stack Overflow', href: 'https://stackoverflow.com'},
-            {label: 'Discord', href: 'https://discordapp.com/invite/docusaurus'},
-            {label: 'X', href: 'https://x.com/docusaurus'},
+            { label: 'Stack Overflow', href: 'https://stackoverflow.com' },
+            { label: 'Discord', href: 'https://discordapp.com/invite/docusaurus' },
+            { label: 'X', href: 'https://x.com/docusaurus' },
           ],
         },
         {
           title: 'More',
           items: [
-            {label: 'Blog', to: '/blog'},
+            { label: 'Blog', to: '/blog' },
             {
               label: 'GitHub',
               href: 'https://github.com/fatimamudassir93/Hackhathon-AI-Book',
