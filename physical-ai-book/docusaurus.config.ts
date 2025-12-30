@@ -19,6 +19,13 @@ const config: Config = {
   // ✅ MUST be "/" for Vercel
   baseUrl: '/',
 
+  // Custom fields for runtime configuration
+  customFields: {
+    // API URL for backend services
+    // In production, set REACT_APP_API_URL environment variable in Vercel
+    apiUrl: process.env.REACT_APP_API_URL || 'http://localhost:8000',
+  },
+
   organizationName: 'fatimamudassir93',
   projectName: 'Hackhathon-AI-Book',
 

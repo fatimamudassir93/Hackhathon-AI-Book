@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useApiUrl } from '../utils/apiConfig';
 import ChatbotFilters from './ChatbotFilters';
 import styles from './Chatbot.module.css';
 
@@ -24,8 +25,10 @@ interface ChatbotProps {
   apiUrl?: string;
 }
 
-const Chatbot: React.FC<ChatbotProps> = ({ apiUrl = 'http://localhost:8000' }) => {
-  console.log('Chatbot: API_URL', apiUrl);
+const Chatbot: React.FC<ChatbotProps> = ({ apiUrl: propApiUrl }) => {
+  const apiUrl = useApiUrl();
+  const finalApiUrl = propApiUrl || apiUrl;
+  console.log('Chatbot: API_URL', finalApiUrl);
   const { token, user, isLoading: authLoading } = useAuth();
   console.log('Chatbot: token', token);
   console.log('Chatbot: user', user);
@@ -72,7 +75,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ apiUrl = 'http://localhost:8000' }) =
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${apiUrl}/api/chat`, {
+    const response = await fetch(`${finalApiUrl}/api/chat`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -138,7 +141,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ apiUrl = 'http://localhost:8000' }) =
 
       if (error instanceof Error) {
         if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-          errorContent = '🔌 Cannot connect to the backend server. Please make sure it\'s running at ' + apiUrl;
+          errorContent = '🔌 Cannot connect to the backend server. Please make sure it\'s running at ' + finalApiUrl;
         } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
           errorContent = '🔒 Authentication required. Please sign in to use the chatbot.';
         } else if (error.message.includes('403') || error.message.includes('Forbidden')) {
@@ -189,7 +192,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ apiUrl = 'http://localhost:8000' }) =
             <h3>📚 Ask about the Book</h3>
             <div className={styles.headerActions}>
               <ChatbotFilters
-                apiUrl={apiUrl}
+                apiUrl={finalApiUrl}
                 selectedChapter={chapterFilter}
                 onChapterChange={setChapterFilter}
               />
