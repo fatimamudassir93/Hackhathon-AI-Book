@@ -22,6 +22,9 @@ groq==0.4.1  # Optional - for Groq (RECOMMENDED for free tier)
 google-generativeai==0.3.2  # Optional - for Google Gemini
 sentence-transformers==2.3.1  # For local embeddings fallback
 qdrant-client==1.7.3
+langchain-community
+langchain-openai
+chromadb
 
 # Utilities
 httpx==0.26.0

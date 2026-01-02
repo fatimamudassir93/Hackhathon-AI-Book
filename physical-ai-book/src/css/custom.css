@@ -4,30 +4,257 @@
  * work well for content-centric websites.
  */
 
-/* Import Urdu font for translations */
+/* Import fonts for robotics theme */
 @import url('https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&display=swap');
 
-/* You can override the default Infima variables here. */
+/* Robotics Theme - Light Mode */
 :root {
-  --ifm-color-primary: #2e8555;
-  --ifm-color-primary-dark: #29784c;
-  --ifm-color-primary-darker: #277148;
-  --ifm-color-primary-darkest: #205d3b;
-  --ifm-color-primary-light: #33925d;
-  --ifm-color-primary-lighter: #359962;
-  --ifm-color-primary-lightest: #3cad6e;
+  /* Primary Colors - Robotics Blue Theme */
+  --ifm-color-primary: #3498db;
+  --ifm-color-primary-dark: #2980b9;
+  --ifm-color-primary-darker: #2472a4;
+  --ifm-color-primary-darkest: #1c5a85;
+  --ifm-color-primary-light: #5dade2;
+  --ifm-color-primary-lighter: #76b9e8;
+  --ifm-color-primary-lightest: #aed6f1;
+
+  /* Accent Colors for Robotics Theme */
+  --ifm-color-secondary: #e74c3c;
+  --ifm-color-success: #00d4ff;
+  --ifm-color-info: #3498db;
+  --ifm-color-warning: #f39c12;
+  --ifm-color-danger: #e74c3c;
+
+  /* Background Colors */
+  --ifm-background-color: #f8f9fa;
+  --ifm-background-surface-color: #ffffff;
+
+  /* Typography */
+  --ifm-font-family-base: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+  --ifm-heading-font-family: 'Orbitron', 'Space Grotesk', sans-serif;
+  --ifm-font-size-base: 16px;
+  --ifm-line-height-base: 1.65;
   --ifm-code-font-size: 95%;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+
+  /* Spacing and Layout */
+  --ifm-spacing-horizontal: 1.5rem;
+  --ifm-navbar-height: 4rem;
+
+  /* Border and Shadow */
+  --ifm-global-border-width: 1px;
+  --ifm-global-radius: 0.5rem;
+  --ifm-hover-overlay: rgba(52, 152, 219, 0.05);
+
+  /* Code blocks */
+  --docusaurus-highlighted-code-line-bg: rgba(52, 152, 219, 0.15);
+
+  /* Custom robotics theme variables */
+  --robotics-grid-color: rgba(52, 152, 219, 0.1);
+  --robotics-accent-glow: rgba(52, 152, 219, 0.4);
+  --robotics-card-bg: #ffffff;
+  --robotics-border: rgba(52, 152, 219, 0.2);
 }
 
-/* For readability concerns, you should choose a lighter palette in dark mode. */
+/* Robotics Theme - Dark Mode */
 [data-theme='dark'] {
-  --ifm-color-primary: #25c2a0;
-  --ifm-color-primary-dark: #21af90;
-  --ifm-color-primary-darker: #1fa588;
-  --ifm-color-primary-darkest: #1a8870;
-  --ifm-color-primary-light: #29d5b0;
-  --ifm-color-primary-lighter: #32d8b4;
-  --ifm-color-primary-lightest: #4fddbf;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+  /* Primary Colors - Enhanced for dark mode */
+  --ifm-color-primary: #5dade2;
+  --ifm-color-primary-dark: #3498db;
+  --ifm-color-primary-darker: #2980b9;
+  --ifm-color-primary-darkest: #2472a4;
+  --ifm-color-primary-light: #76b9e8;
+  --ifm-color-primary-lighter: #aed6f1;
+  --ifm-color-primary-lightest: #d6eaf8;
+
+  /* Accent Colors for Dark Mode */
+  --ifm-color-secondary: #ff6b6b;
+  --ifm-color-success: #00d4ff;
+  --ifm-color-info: #5dade2;
+  --ifm-color-warning: #f39c12;
+  --ifm-color-danger: #ff6b6b;
+
+  /* Background Colors - Dark Robotics Theme */
+  --ifm-background-color: #0a0e27;
+  --ifm-background-surface-color: #13182b;
+  --ifm-navbar-background-color: #0f1419;
+
+  /* Text Colors */
+  --ifm-font-color-base: #e8e8e8;
+  --ifm-heading-color: #ffffff;
+
+  /* Code blocks */
+  --docusaurus-highlighted-code-line-bg: rgba(52, 152, 219, 0.25);
+
+  /* Custom robotics theme variables for dark mode */
+  --robotics-grid-color: rgba(52, 152, 219, 0.15);
+  --robotics-accent-glow: rgba(52, 152, 219, 0.6);
+  --robotics-card-bg: #1a1f3a;
+  --robotics-border: rgba(52, 152, 219, 0.3);
+}
+
+/* Global Robotics Styling */
+
+/* Headings with robotics font */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--ifm-heading-font-family);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* Navbar enhancements */
+.navbar {
+  box-shadow: 0 2px 20px rgba(52, 152, 219, 0.1);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--robotics-border);
+}
+
+.navbar__title {
+  font-family: var(--ifm-heading-font-family);
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: 0.5px;
+}
+
+/* Sidebar styling */
+.menu {
+  font-family: var(--ifm-font-family-base);
+}
+
+.menu__link {
+  border-radius: var(--ifm-global-radius);
+  transition: all 0.2s ease;
+}
+
+.menu__link:hover {
+  background: var(--ifm-hover-overlay);
+  color: var(--ifm-color-primary);
+}
+
+.menu__link--active {
+  background: linear-gradient(135deg, rgba(52, 152, 219, 0.1) 0%, rgba(52, 152, 219, 0.05) 100%);
+  color: var(--ifm-color-primary);
+  font-weight: 600;
+  border-left: 3px solid var(--ifm-color-primary);
+}
+
+/* Cards and containers */
+.card {
+  background: var(--robotics-card-bg);
+  border: 1px solid var(--robotics-border);
+  border-radius: var(--ifm-global-radius);
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 30px var(--robotics-accent-glow);
+  border-color: var(--ifm-color-primary);
+}
+
+/* Buttons with robotics theme */
+.button {
+  border-radius: var(--ifm-global-radius);
+  font-weight: 600;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 0.9rem;
+}
+
+.button--primary {
+  background: linear-gradient(135deg, var(--ifm-color-primary) 0%, var(--ifm-color-primary-dark) 100%);
+  border: none;
+  box-shadow: 0 4px 15px var(--robotics-accent-glow);
+}
+
+.button--primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 25px var(--robotics-accent-glow);
+}
+
+/* Footer styling */
+.footer {
+  background: linear-gradient(135deg, var(--ifm-background-surface-color) 0%, var(--ifm-background-color) 100%);
+  border-top: 2px solid var(--robotics-border);
+}
+
+[data-theme='dark'] .footer {
+  background: linear-gradient(135deg, #0a0e27 0%, #13182b 100%);
+}
+
+/* Markdown content enhancements */
+.markdown {
+  font-family: var(--ifm-font-family-base);
+}
+
+.markdown h1,
+.markdown h2 {
+  border-bottom: 2px solid var(--robotics-border);
+  padding-bottom: 0.5rem;
+}
+
+/* Code blocks */
+pre {
+  border-radius: var(--ifm-global-radius);
+  border: 1px solid var(--robotics-border);
+}
+
+/* Links */
+a {
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  text-decoration: none;
+  color: var(--ifm-color-primary-light);
+}
+
+/* Table of contents */
+.table-of-contents {
+  border-left: 2px solid var(--robotics-border);
+}
+
+.table-of-contents__link--active {
+  color: var(--ifm-color-primary);
+  font-weight: 600;
+  border-left: 2px solid var(--ifm-color-primary);
+  margin-left: -2px;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--ifm-background-color);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--ifm-color-primary);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ifm-color-primary-dark);
+}
+
+/* Animated gradient text utility class */
+.gradient-text {
+  background: linear-gradient(135deg, var(--ifm-color-primary) 0%, var(--ifm-color-primary-lightest) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glow effect utility */
+.glow {
+  box-shadow: 0 0 20px var(--robotics-accent-glow);
+}
+
+/* Smooth transitions for theme switching */
+* {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }

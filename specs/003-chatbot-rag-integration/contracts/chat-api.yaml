@@ -1,0 +1,453 @@
+openapi: 3.0.3
+info:
+  title: Physical AI Book - RAG Chat API
+  description: |
+    Retrieval-Augmented Generation (RAG) chat API for the Physical AI & Humanoid Robotics textbook.
+
+    Features:
+    - Natural language question answering
+    - Vector-based semantic search (Qdrant)
+    - Source citations with relevance scores
+    - Chapter-based filtering
+    - Text selection context support
+    - In/out-of-scope detection
+    - User personalization (for authenticated users)
+    - Rate limiting and response caching
+
+    **Authentication**: Optional Bearer token (JWT) for personalized responses and chat history
+  version: 2.0.0
+  contact:
+    name: Physical AI Book API Support
+    email: support@example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+  - url: https://api.physical-ai-book.com
+    description: Production server (placeholder)
+
+tags:
+  - name: chat
+    description: RAG chat endpoints
+  - name: utility
+    description: Utility and metadata endpoints
+  - name: auth
+    description: Authentication endpoints (optional)
+
+paths:
+  /api/chat:
+    post:
+      tags:
+        - chat
+      summary: Send chat message and get RAG-powered response
+      description: |
+        Main chat endpoint that:
+        1. Generates embedding for user query
+        2. Searches Qdrant vector database for relevant textbook content
+        3. Detects if question is in scope (covered by textbook)
+        4. Generates contextualized answer using LLM (Groq/Gemini)
+        5. Returns answer with source citations
+
+        **Rate Limit**: ~10 requests per minute per user
+        **Response Time**: 90th percentile < 3 seconds
+      operationId: chat
+      security:
+        - BearerAuth: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+            examples:
+              basic_question:
+                summary: Basic question (no filters)
+                value:
+                  message: "What is embodied intelligence?"
+                  session_id: null
+                  selected_text: null
+                  chapter_filter: null
+                  use_history: true
+
+              filtered_question:
+                summary: Question with chapter filter
+                value:
+                  message: "How does ROS 2 work?"
+                  session_id: "550e8400-e29b-41d4-a716-446655440000"
+                  selected_text: null
+                  chapter_filter: "Chapter 3"
+                  use_history: true
+
+              contextual_question:
+                summary: Question with selected text context
+                value:
+                  message: "Can you explain this in simpler terms?"
+                  session_id: "550e8400-e29b-41d4-a716-446655440000"
+                  selected_text: "SLAM (Simultaneous Localization and Mapping) algorithms..."
+                  chapter_filter: null
+                  use_history: true
+
+      responses:
+        '200':
+          description: Successful response with answer and sources
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatResponse'
+              examples:
+                in_scope_answer:
+                  summary: In-scope answer with sources
+                  value:
+                    response: "Embodied intelligence refers to the concept that intelligent behavior emerges from the interaction between an agent's body, brain, and environment..."
+                    sources:
+                      - chapter: "Chapter 1"
+                        title: "Introduction to Physical AI"
+                        section: "Embodied Intelligence"
+                        score: 0.8523
+                        url: "http://localhost:3000/docs/chapter-1#embodied-intelligence"
+                      - chapter: "Chapter 1"
+                        title: "Introduction to Physical AI"
+                        section: "Physical AI Paradigm"
+                        score: 0.7245
+                        url: "http://localhost:3000/docs/chapter-1#physical-ai-paradigm"
+                    citations: "[1] Chapter 1: Introduction to Physical AI - Embodied Intelligence\n[2] Chapter 1: Introduction to Physical AI - Physical AI Paradigm"
+                    session_id: "550e8400-e29b-41d4-a716-446655440000"
+                    in_scope: true
+
+                out_of_scope_answer:
+                  summary: Out-of-scope question
+                  value:
+                    response: "I'm sorry, but your question about quantum computing doesn't appear to be covered in this textbook on Physical AI and Humanoid Robotics..."
+                    sources: []
+                    citations: ""
+                    session_id: "550e8400-e29b-41d4-a716-446655440000"
+                    in_scope: false
+
+        '400':
+          description: Bad request (invalid input)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: "Message cannot be empty"
+
+        '401':
+          description: Unauthorized (invalid or missing token)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: "Invalid authentication credentials"
+
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: "Rate limit exceeded. You can make another request in about 1 minute. Rate limit resets at 14:35:00."
+
+        '500':
+          description: Server error (search failure, LLM error, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                search_error:
+                  summary: Vector search failed
+                  value:
+                    detail: "Search error: Failed to retrieve relevant content from the textbook. Please check that the Qdrant connection is working properly."
+
+                llm_error:
+                  summary: LLM generation failed
+                  value:
+                    detail: "Response generation error: Failed to generate a response. Please try again later."
+
+  /api/chapters:
+    get:
+      tags:
+        - utility
+      summary: Get list of available chapters
+      description: Returns all chapters available in the textbook for use in chapter filtering
+      operationId: getChapters
+      responses:
+        '200':
+          description: List of chapters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  chapters:
+                    type: array
+                    items:
+                      type: string
+                    description: List of chapter identifiers
+                  count:
+                    type: integer
+                    description: Number of chapters
+              example:
+                chapters:
+                  - "Chapter 1"
+                  - "Chapter 2"
+                  - "Chapter 3"
+                  - "Chapter 4"
+                  - "Chapter 5"
+                  - "Chapter 6"
+                count: 6
+
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /health:
+    get:
+      tags:
+        - utility
+      summary: Health check
+      description: Check API and dependency health (Qdrant, database)
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy]
+                  qdrant_connected:
+                    type: boolean
+                  qdrant_collection_exists:
+                    type: boolean
+                  database_connected:
+                    type: boolean
+              example:
+                status: "healthy"
+                qdrant_connected: true
+                qdrant_collection_exists: true
+                database_connected: true
+
+        '503':
+          description: Service unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Optional JWT token for authenticated users.
+        Provides access to:
+        - Personalized responses (based on user profile)
+        - Chat history persistence
+        - User-specific rate limiting
+
+        Obtain token from /api/auth/signin endpoint
+
+  schemas:
+    ChatRequest:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: User's question about the textbook
+          example: "What is embodied intelligence?"
+
+        session_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            UUID for conversation tracking.
+            If not provided, a new session ID will be generated.
+          example: "550e8400-e29b-41d4-a716-446655440000"
+
+        selected_text:
+          type: string
+          maxLength: 5000
+          nullable: true
+          description: |
+            Text highlighted by user on the page.
+            Provides additional context for the query.
+          example: "SLAM (Simultaneous Localization and Mapping) algorithms enable robots to build maps..."
+
+        chapter_filter:
+          type: string
+          nullable: true
+          description: |
+            Filter search results to a specific chapter.
+            Use null or omit for "All Chapters".
+            Must match chapter identifier from /api/chapters.
+          example: "Chapter 3"
+
+        use_history:
+          type: boolean
+          default: true
+          description: |
+            Include conversation history in context (for multi-turn conversations).
+            Currently not fully implemented (each query is independent).
+
+    ChatResponse:
+      type: object
+      required:
+        - response
+        - sources
+        - citations
+        - session_id
+        - in_scope
+      properties:
+        response:
+          type: string
+          description: |
+            LLM-generated answer to user's question.
+            Formatted in markdown for readability.
+          example: "Embodied intelligence refers to the concept that intelligent behavior emerges from the interaction between an agent's body, brain, and environment..."
+
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/Source'
+          description: |
+            List of source citations from the textbook.
+            Sorted by relevance score (highest first).
+            Empty if question is out of scope.
+
+        citations:
+          type: string
+          description: |
+            Formatted citation text (footnote style).
+            Can be displayed in a "View Citations" section.
+          example: "[1] Chapter 1: Introduction to Physical AI - Embodied Intelligence\n[2] Chapter 1: Introduction to Physical AI - Physical AI Paradigm"
+
+        session_id:
+          type: string
+          format: uuid
+          description: |
+            UUID for this conversation session.
+            Use this in subsequent requests to maintain conversation context.
+          example: "550e8400-e29b-41d4-a716-446655440000"
+
+        in_scope:
+          type: boolean
+          description: |
+            Whether the question is covered by the textbook.
+            If false, `sources` will be empty and `response` will explain the out-of-scope status.
+          example: true
+
+    Source:
+      type: object
+      required:
+        - chapter
+        - title
+        - score
+      properties:
+        chapter:
+          type: string
+          description: Chapter identifier (e.g., "Chapter 1")
+          example: "Chapter 1"
+
+        title:
+          type: string
+          description: Chapter or section title
+          example: "Introduction to Physical AI"
+
+        section:
+          type: string
+          nullable: true
+          description: |
+            Subsection heading (if applicable).
+            Provides more specific attribution.
+          example: "Embodied Intelligence"
+
+        score:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          description: |
+            Vector similarity score (cosine similarity).
+            Higher scores indicate more relevant sources.
+            Typically displayed as percentage (e.g., 85%).
+          example: 0.8523
+
+        url:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            Clickable URL to the specific section in the Docusaurus textbook.
+            Generated from file_path and heading metadata.
+          example: "http://localhost:3000/docs/chapter-1#embodied-intelligence"
+
+    ErrorResponse:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          description: Human-readable error message
+          example: "Rate limit exceeded"
+
+externalDocs:
+  description: Physical AI Book Documentation
+  url: https://docs.physical-ai-book.com
+
+x-ratelimit:
+  limit: 10
+  window: 60
+  unit: seconds
+  scope: per-user
+
+x-response-time:
+  p50: 1.5
+  p90: 2.8
+  p95: 3.2
+  p99: 4.5
+  unit: seconds
+
+x-caching:
+  enabled: true
+  ttl: 3600
+  key: "message + chapter_filter + selected_text"
+  hit_rate: 0.35
+
+x-dependencies:
+  qdrant:
+    collection: "physical_ai_book"
+    vectors: 246
+    dimensions: 384
+    metric: "cosine"
+
+  llm:
+    primary: "Groq (llama-3.3-70b-versatile)"
+    fallback: "Google Gemini"
+    max_tokens: 1000
+    temperature: 0.7
+
+  embedding:
+    model: "sentence-transformers/all-MiniLM-L6-v2"
+    dimensions: 384

@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useApiUrl } from '../utils/apiConfig';
 import ChatbotFilters from './ChatbotFilters';
+import ChatbotRobot from './ChatbotRobot';
 import styles from './Chatbot.module.css';
 
 interface Source {
@@ -173,64 +175,104 @@ const Chatbot: React.FC<ChatbotProps> = ({ apiUrl: propApiUrl }) => {
 
   return (
     <>
-      {/* Floating Chat Button */}
-      {!isOpen && (
-        <button
-          className={styles.chatButton}
-          onClick={() => setIsOpen(true)}
-          aria-label="Open chat"
-        >
-          💬
-        </button>
-      )}
+      {/* Floating Chat Button with Animated Robot */}
+      <div className={styles.chatButtonContainer}>
+        <ChatbotRobot
+          isOpen={isOpen}
+          onClick={() => setIsOpen(!isOpen)}
+        />
+      </div>
 
       {/* Chat Window */}
-      {isOpen && (
-        <div className={styles.chatWindow}>
-          {/* Header */}
-          <div className={styles.chatHeader}>
-            <h3>📚 Ask about the Book</h3>
-            <div className={styles.headerActions}>
-              <ChatbotFilters
-                apiUrl={finalApiUrl}
-                selectedChapter={chapterFilter}
-                onChapterChange={setChapterFilter}
-              />
-              <button
-                className={styles.closeButton}
-                onClick={() => setIsOpen(false)}
-                aria-label="Close chat"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            className={styles.chatWindow}
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+          >
+            {/* Header */}
+            <motion.div
+              className={styles.chatHeader}
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+            >
+              <div className={styles.headerTitle}>
+                <motion.span
+                  className={styles.robotIcon}
+                  animate={{ rotate: [0, 10, -10, 0] }}
+                  transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
+                >
+                  🤖
+                </motion.span>
+                <h3>AI Assistant</h3>
+              </div>
+              <div className={styles.headerActions}>
+                <ChatbotFilters
+                  apiUrl={finalApiUrl}
+                  selectedChapter={chapterFilter}
+                  onChapterChange={setChapterFilter}
+                />
+                <button
+                  className={styles.closeButton}
+                  onClick={() => setIsOpen(false)}
+                  aria-label="Close chat"
+                >
+                  ✕
+                </button>
+              </div>
+            </motion.div>
 
           {/* Messages */}
           <div className={styles.messagesContainer}>
             {messages.length === 0 && (
-              <div className={styles.welcomeMessage}>
-                <p>👋 Hi! I can help you understand the Physical AI & Humanoid Robotics textbook.</p>
+              <motion.div
+                className={styles.welcomeMessage}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.2 }}
+              >
+                <motion.div
+                  animate={{ y: [0, -5, 0] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                >
+                  👋
+                </motion.div>
+                <p>Hi! I can help you understand the Physical AI & Humanoid Robotics textbook.</p>
                 <p>Ask me anything about:</p>
-                <ul>
-                  <li>Physical AI concepts</li>
-                  <li>Embodied intelligence</li>
-                  <li>ROS 2 and robotics frameworks</li>
-                  <li>VSLAM and Navigation</li>
-                  <li>Simulation environments</li>
-                </ul>
+                <motion.ul
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.4 }}
+                >
+                  <li>🤖 Physical AI concepts</li>
+                  <li>🧠 Embodied intelligence</li>
+                  <li>⚙️ ROS 2 and robotics frameworks</li>
+                  <li>🗺️ VSLAM and Navigation</li>
+                  <li>🎮 Simulation environments</li>
+                </motion.ul>
                 {selectedText && (
-                  <div className={styles.selectedTextHint}>
+                  <motion.div
+                    className={styles.selectedTextHint}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                  >
                     💡 You have text selected. Click "Ask about Selection" to query it!
-                  </div>
+                  </motion.div>
                 )}
-              </div>
+              </motion.div>
             )}
 
             {messages.map((msg, idx) => (
-              <div
+              <motion.div
                 key={idx}
                 className={`${styles.message} ${styles[msg.role]} ${msg.error ? styles.error : ''}`}
+                initial={{ opacity: 0, x: msg.role === 'user' ? 20 : -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3 }}
               >
                 <div className={styles.messageContent}>
                   {typeof msg.content === 'string'
@@ -269,22 +311,48 @@ const Chatbot: React.FC<ChatbotProps> = ({ apiUrl: propApiUrl }) => {
                     </details>
                   </div>
                 )}
-              </div>
+              </motion.div>
             ))}
 
             {isLoading && (
-              <div className={`${styles.message} ${styles.assistant}`}>
+              <motion.div
+                className={`${styles.message} ${styles.assistant}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+              >
                 <div className={styles.loadingDots}>
-                  <span>.</span><span>.</span><span>.</span>
+                  <motion.span
+                    animate={{ opacity: [0.3, 1, 0.3] }}
+                    transition={{ duration: 1, repeat: Infinity, delay: 0 }}
+                  >
+                    .
+                  </motion.span>
+                  <motion.span
+                    animate={{ opacity: [0.3, 1, 0.3] }}
+                    transition={{ duration: 1, repeat: Infinity, delay: 0.2 }}
+                  >
+                    .
+                  </motion.span>
+                  <motion.span
+                    animate={{ opacity: [0.3, 1, 0.3] }}
+                    transition={{ duration: 1, repeat: Infinity, delay: 0.4 }}
+                  >
+                    .
+                  </motion.span>
                 </div>
-              </div>
+              </motion.div>
             )}
 
             <div ref={messagesEndRef} />
           </div>
 
           {/* Input Area */}
-          <div className={styles.inputArea}>
+          <motion.div
+            className={styles.inputArea}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
             {selectedText && (
               <div className={styles.selectedTextBadge}>
                 ✂️ Text selected ({selectedText.length} chars)
@@ -322,9 +390,10 @@ const Chatbot: React.FC<ChatbotProps> = ({ apiUrl: propApiUrl }) => {
                 )}
               </div>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </>
   );
 };

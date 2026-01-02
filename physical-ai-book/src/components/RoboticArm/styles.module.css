@@ -1,0 +1,44 @@
+.roboticArmContainer {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 500px;
+  padding: 2rem;
+  overflow: hidden;
+}
+
+.roboticArmSvg {
+  max-width: 100%;
+  height: auto;
+  filter: drop-shadow(0 10px 30px rgba(52, 152, 219, 0.3));
+}
+
+.particles {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: radial-gradient(circle, rgba(52, 152, 219, 0.8) 0%, rgba(52, 152, 219, 0) 70%);
+  border-radius: 50%;
+}
+
+@media (max-width: 768px) {
+  .roboticArmContainer {
+    min-height: 400px;
+    padding: 1rem;
+  }
+
+  .roboticArmSvg {
+    width: 300px;
+  }
+}
