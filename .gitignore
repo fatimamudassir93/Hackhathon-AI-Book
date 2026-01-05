@@ -54,17 +54,23 @@ TROUBLESHOOTING_GUIDE.md
 WORKING_GROQ_SETUP.md
 history/prompts/physical-ai-robotics-book/*.misc.prompt.md
 nul
-physical-ai-book/src/components/AuthModal.module.css
-physical-ai-book/src/components/AuthModal.tsx
-physical-ai-book/src/components/ChapterActions.module.css
-physical-ai-book/src/components/ChapterActions.tsx
-physical-ai-book/src/context/
 physical-ai-book/src/theme/DocItem/
 physical-ai-book/src/theme/Navbar/
 rag-backend/README.md
-rag-backend/*.py
 rag-backend/*.bat
 rag-backend/*.ps1
 rebotics.jpg
 rebotics_files/
 specs/001-physical-ai-robotics-book/checklists/enhanced-features.md
+# RAG runtime
+.ingestion_cache.json
+__pycache__/
+*.pyc
+
+# Reports generated locally
+*_REPORT.md
+FINAL_TEST_REPORT.md
+CHATBOT_VALIDATION_REPORT.md
+
+# Logs / debug
+debug_payload.py

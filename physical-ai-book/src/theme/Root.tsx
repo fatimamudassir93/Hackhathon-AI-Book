@@ -7,7 +7,7 @@ export default function Root({ children }) {
   return (
     <AuthProvider>
       {children}
-      <Chatbot apiUrl="http://localhost:8000" />
+      <Chatbot />
     </AuthProvider>
   );
 }

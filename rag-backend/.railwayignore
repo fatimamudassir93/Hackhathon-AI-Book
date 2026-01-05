@@ -1,0 +1,49 @@
+# Ignore local development files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Environment and secrets
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs and caches
+*.log
+.ingestion_cache.json
+ingestion.log
+
+# Test files
+test_*.py
+*_test.py
+
+# Batch and PowerShell scripts
+*.bat
+*.ps1
+
+# Documentation
+*.md
+!README.md
+
+# Data files (if you have local data that shouldn't be deployed)
+data/
+*.csv
+*.json
+!railway.json

@@ -8,12 +8,18 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import datetime, timedelta
 import os
 import json
 import uuid
+import time
 from qdrant_client import QdrantClient, models
+from httpx import HTTPStatusError
 from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from cohere import Client as CohereClient
+from qdrant_client.http import models as q_models
+
 
 # Import our modules
 from database import get_db, engine
@@ -26,6 +32,57 @@ from auth import (
 )
 from llm_providers import get_llm_manager
 
+# Import new RAG services
+from vector_search import create_vector_search_service
+from context_builder import create_context_builder
+from citation_formatter import create_citation_formatter
+from llm_service import create_llm_service
+from scope_detector import create_scope_detector
+
+# Import rate limiter and response cache
+from rate_limiter import is_chat_request_allowed, get_rate_limit_reset_time
+from response_cache import get_cached_response, cache_response, get_cache_stats
+
+# Performance profiling utilities
+class PerformanceProfiler:
+    def __init__(self):
+        self.metrics = {}
+
+    def profile_endpoint(self, name: str):
+        def decorator(func):
+            from functools import wraps
+            @wraps(func)
+            async def wrapper(*args, **kwargs):
+                start_time = time.time()
+                try:
+                    result = await func(*args, **kwargs)
+                    return result
+                finally:
+                    duration = time.time() - start_time
+                    if name not in self.metrics:
+                        self.metrics[name] = []
+                    self.metrics[name].append(duration)
+                    # Keep only last 100 measurements
+                    if len(self.metrics[name]) > 100:
+                        self.metrics[name] = self.metrics[name][-100:]
+            return wrapper
+        return decorator
+
+    def get_stats(self):
+        stats = {}
+        for endpoint, durations in self.metrics.items():
+            if durations:
+                stats[endpoint] = {
+                    'count': len(durations),
+                    'avg_duration': sum(durations) / len(durations),
+                    'min_duration': min(durations),
+                    'max_duration': max(durations),
+                    'p95_duration': sorted(durations)[int(0.95 * len(durations))] if durations else 0
+                }
+        return stats
+
+profiler = PerformanceProfiler()
+
 load_dotenv()
 
 # Create tables on startup
@@ -37,23 +94,49 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# CORS middleware
+# CORS middleware with environment-based configuration
+# Get allowed origins from environment variable or use defaults
+allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "*")
+allowed_origins = allowed_origins_str.split(",") if allowed_origins_str != "*" else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialize clients
+# Initialize clients with error handling
 llm_manager = get_llm_manager()
-qdrant_client = QdrantClient(
-    url=os.getenv("QDRANT_HOST"),
-    api_key=os.getenv("QDRANT_API_KEY"),
-)
+try:
+    qdrant_client = QdrantClient(
+        url=os.getenv("QDRANT_HOST"),
+        api_key=os.getenv("QDRANT_API_KEY"),
+    )
+    # Test connection
+    qdrant_client.get_collections()
+except HTTPStatusError as e:
+    print(f"Qdrant connection error: {e}")
+    raise RuntimeError(f"Failed to connect to Qdrant: {e}. Please check your QDRANT_HOST and QDRANT_API_KEY environment variables.")
+except Exception as e:
+    print(f"Qdrant initialization error: {e}")
+    raise RuntimeError(f"Failed to initialize Qdrant client: {e}. Please check your configuration.")
 
 COLLECTION_NAME = "physical_ai_book"
+
+# Initialize new RAG services
+vector_search = create_vector_search_service(similarity_threshold=0.5, top_k=5)
+context_builder = create_context_builder(max_context_length=4000)
+citation_formatter = create_citation_formatter(style="footnote", include_scores=False)
+scope_detector = create_scope_detector(min_search_score=0.4)
+
+# Initialize LLM service (with fallback to old manager)
+try:
+    llm_service = create_llm_service(model="llama-3.3-70b-versatile", temperature=0.7)
+except Exception as e:
+    print(f"Warning: Failed to initialize LLM service: {e}")
+    llm_service = None
 
 
 # ============================================================================
@@ -68,12 +151,22 @@ class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
     selected_text: Optional[str] = None
+    chapter_filter: Optional[str] = None  # Filter by specific chapter
     use_history: bool = True
+
+class Source(BaseModel):
+    chapter: str
+    title: str
+    section: Optional[str] = ""
+    score: float
+    url: Optional[str] = ""
 
 class ChatResponse(BaseModel):
     response: str
-    sources: List[dict]
+    sources: List[Source]
+    citations: str  # Formatted citations
     session_id: str
+    in_scope: bool  # Whether question was in textbook scope
 
 class PersonalizeRequest(BaseModel):
     chapter_id: str
@@ -245,7 +338,101 @@ Instructions:
     return llm_manager.chat_completion(messages, temperature=0.7, max_tokens=1000)
 
 
+def get_relevant_context_new(
+    query: str,
+    chapter_filter: Optional[str] = None,
+    selected_text: Optional[str] = None,
+    top_k: int = 5
+) -> List[dict]:
+    """
+    Get relevant context using new vector search service
+    """
+    # Use search_with_selected_text for better relevance when text is selected
+    if selected_text and not chapter_filter:
+        # Use selected text search with boosted relevance
+        results = vector_search.search_with_selected_text(
+            query=query,
+            selected_text=selected_text,
+            top_k=top_k
+        )
+    elif chapter_filter:
+        # Chapter filter search
+        results = vector_search.search_by_chapter(
+            query=query,
+            chapter=chapter_filter,
+            top_k=top_k
+        )
+    else:
+        # Regular search
+        results = vector_search.search(
+            query=query,
+            top_k=top_k
+        )
+
+    return results
+
+
+def generate_rag_response_new(
+    query: str,
+    chunks: List[dict],
+    user_profile: Optional[UserProfile] = None
+) -> Dict[str, Any]:
+    """
+    Generate response using new LLM service with RAG context
+    """
+    # Build context
+    context = context_builder.build_context(chunks, query=query)
+
+    # Build custom system prompt with personalization
+    system_prompt = "You are an expert AI assistant for the Physical AI & Humanoid Robotics textbook."
+
+    if user_profile:
+        system_prompt += f"""
+
+User Profile:
+- Technical Level: {user_profile.technical_level}
+- Programming Experience: {', '.join(user_profile.programming_experience) if user_profile.programming_experience else 'Not specified'}
+- Robotics Background: {user_profile.robotics_background}
+- Learning Goals: {user_profile.learning_goals or 'Not specified'}
+
+Please tailor your response to match the user's technical level and background.
+"""
+
+    system_prompt += """
+
+Instructions:
+1. Answer the question using ONLY the provided textbook sources
+2. Be clear and concise
+3. Reference specific chapters/sections when relevant (e.g., "According to Chapter 1...")
+4. If the sources don't contain enough information, say so
+5. Format your response in markdown for readability
+"""
+
+    # Use new LLM service or fallback to old manager
+    if llm_service:
+        result = llm_service.generate_with_context(
+            query=query,
+            context=context,
+            system_prompt=system_prompt
+        )
+        response_text = result.get('response', '')
+    else:
+        # Fallback to old llm_manager
+        prompt_dict = context_builder.build_prompt(query, chunks, system_prompt)
+        messages = [
+            {"role": "system", "content": prompt_dict['system']},
+            {"role": "user", "content": prompt_dict['user']}
+        ]
+        response_text = llm_manager.chat_completion(messages, temperature=0.7, max_tokens=1000)
+
+    return {
+        'response': response_text,
+        'context_length': len(context)
+    }
+
+
 @app.post("/api/chat", response_model=ChatResponse)
+@profiler.profile_endpoint("chat")
 async def chat(
     request: ChatRequest,
     db: Session = Depends(get_db),
@@ -253,33 +440,167 @@ async def chat(
 ):
     """
     Enhanced RAG chat endpoint with:
-    - Better source attribution
+    - Vector search with similarity thresholds
+    - Scope detection (in/out of textbook domain)
+    - Chapter filtering support
+    - Citation formatting
     - User profile awareness
     - Optional text selection context
     - Chat history tracking
+    - Rate limiting
+    - Response caching
     """
     try:
+        # Get client identifier for rate limiting (use IP if available, fallback to user ID)
+        # In a real deployment, you'd get the client IP from request headers
+        client_identifier = current_user.email if current_user else "anonymous"
+
+        # Check rate limit
+        if not is_chat_request_allowed(client_identifier):
+            reset_time = get_rate_limit_reset_time(client_identifier)
+            reset_time_str = ""
+            if reset_time:
+                from datetime import datetime
+                reset_dt = datetime.fromtimestamp(reset_time)
+                reset_time_str = f" Rate limit resets at {reset_dt.strftime('%H:%M:%S')}."
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded. You can make another request in about 1 minute.{reset_time_str}"
+            )
+
         # Get or create session ID
         session_id = request.session_id or str(uuid.uuid4())
 
-        # Get relevant sources
-        sources = get_relevant_context(
+        # Check cache first (use question and context as cache key)
+        cache_context = {
+            'chapter_filter': request.chapter_filter,
+            'selected_text': request.selected_text
+        }
+        cached_response = get_cached_response(request.message, cache_context)
+        if cached_response:
+            # Add to chat history if user is logged in
+            if current_user:
+                user_message = ChatHistory(
+                    user_id=current_user.id,
+                    session_id=uuid.UUID(session_id),
+                    role="user",
+                    content=request.message
+                )
+                db.add(user_message)
+
+                assistant_message = ChatHistory(
+                    user_id=current_user.id,
+                    session_id=uuid.UUID(session_id),
+                    role="assistant",
+                    content=cached_response['response'],
+                    sources=[{
+                        "chapter": s['chapter'],
+                        "title": s['title'],
+                        "section": s['section'],
+                        "score": s['score']
+                    } for s in cached_response['search_results'][:3]]
+                )
+                db.add(assistant_message)
+                db.commit()
+
+            return ChatResponse(
+                response=cached_response['response'],
+                sources=[
+                    Source(
+                        chapter=s['chapter'],
+                        title=s['title'],
+                        section=s.get('section', ''),
+                        score=s['score'],
+                        url=cached_response['citations']['sources'][i].get('url', '') if i < len(cached_response['citations']['sources']) else ''
+                    )
+                    for i, s in enumerate(cached_response['search_results'])
+                ],
+                citations=cached_response['citations']['formatted'],
+                session_id=session_id,
+                in_scope=cached_response['in_scope']
+            )
+
+        # Step 1: Get relevant sources using new vector search
+        try:
+            search_results = get_relevant_context_new(
+                query=request.message,
+                chapter_filter=request.chapter_filter,
+                selected_text=request.selected_text,
+                top_k=5
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Search error: Failed to retrieve relevant content from the textbook. Please check that the Qdrant connection is working properly. Error: {str(e)}"
+            )
+
+        # Step 2: Check if question is in scope
+        in_scope, scope_reason, scope_confidence = scope_detector.is_in_scope(
             query=request.message,
-            top_k=5,
-            selected_text=request.selected_text
+            search_results=search_results
         )
 
-        # Get user profile for personalization
+        # Step 3: Handle out-of-scope questions
+        if not in_scope:
+            out_of_scope_msg = scope_detector.get_out_of_scope_message(scope_reason)
+            # Cache out-of-scope responses too
+            cache_response(
+                request.message,
+                {
+                    'response': out_of_scope_msg,
+                    'search_results': [],
+                    'citations': {'formatted': '', 'sources': []},
+                    'in_scope': False
+                },
+                cache_context
+            )
+            return ChatResponse(
+                response=out_of_scope_msg,
+                sources=[],
+                citations="",
+                session_id=session_id,
+                in_scope=False
+            )
+
+        # Step 4: Generate formatted citations
+        try:
+            citation_result = citation_formatter.format_citations(search_results)
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Citation formatting error: {str(e)}"
+            )
+
+        # Step 5: Get user profile for personalization
         user_profile = current_user.profile if current_user else None
 
-        # Generate response
-        response_text = generate_rag_response(
-            query=request.message,
-            sources=sources,
-            user_profile=user_profile
-        )
+        # Step 6: Generate response with context
+        try:
+            rag_result = generate_rag_response_new(
+                query=request.message,
+                chunks=search_results,
+                user_profile=user_profile
+            )
+            response_text = rag_result['response']
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Response generation error: Failed to generate a response. Please try again later. Error: {str(e)}"
+            )
 
-        # Save to chat history if user is logged in
+        # Step 7: Format sources for response
+        formatted_sources = [
+            Source(
+                chapter=s['chapter'],
+                title=s['title'],
+                section=s.get('section', ''),
+                score=s['score'],
+                url=citation_result['sources'][i].get('url', '') if i < len(citation_result['sources']) else ''
+            )
+            for i, s in enumerate(search_results)
+        ]
+
+        # Step 8: Save to chat history if user is logged in
         if current_user:
             # Save user message
             user_message = ChatHistory(
@@ -297,20 +618,38 @@ async def chat(
                 role="assistant",
                 content=response_text,
                 sources=[{
-                    "chapter": s["chapter"],
-                    "heading": s["heading"],
-                    "score": s["score"]
-                } for s in sources[:3]]  # Save top 3 sources
+                    "chapter": s.chapter,
+                    "title": s.title,
+                    "section": s.section,
+                    "score": s.score
+                } for s in formatted_sources[:3]]  # Save top 3 sources
             )
             db.add(assistant_message)
             db.commit()
 
-        return ChatResponse(
-            response=response_text,
-            sources=sources,
-            session_id=session_id
+        # Cache the response for frequently asked questions
+        cache_response(
+            request.message,
+            {
+                'response': response_text,
+                'search_results': search_results,
+                'citations': citation_result,
+                'in_scope': True
+            },
+            cache_context
         )
 
+        return ChatResponse(
+            response=response_text,
+            sources=formatted_sources,
+            citations=citation_result['formatted'],
+            session_id=session_id,
+            in_scope=True
+        )
+
+    except HTTPException:
+        # Re-raise HTTP exceptions (like rate limiting)
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chat error: {str(e)}")
 
@@ -490,6 +829,117 @@ async def root():
         ]
     }
 
+@app.get("/api/chapters")
+async def get_chapters():
+    """Get list of chapters available in the textbook"""
+    try:
+        # Query unique chapters from Qdrant
+        # Use scroll to get all points and extract unique chapters
+        result = qdrant_client.scroll(
+            collection_name=COLLECTION_NAME,
+            limit=100,
+            with_payload=True,
+            with_vectors=False
+        )
+
+        chapters = set()
+        if result and result[0]:
+            for point in result[0]:
+                chapter = point.payload.get('chapter')
+                if chapter and chapter != "Unknown":
+                    chapters.add(chapter)
+
+        # Sort chapters by number
+        sorted_chapters = sorted(
+            chapters,
+            key=lambda x: int(''.join(filter(str.isdigit, x))) if any(c.isdigit() for c in x) else 999
+        )
+
+        return {
+            "chapters": sorted_chapters,
+            "count": len(sorted_chapters)
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch chapters: {str(e)}")
+
+
+@app.get("/api/ingestion/status")
+async def get_ingestion_status():
+    """Get ingestion monitoring dashboard data"""
+    try:
+        # Get collection info
+        collection_info = qdrant_client.get_collection(COLLECTION_NAME)
+
+        # Get total points count
+        total_points = collection_info.points_count
+
+        # Get unique chapters count
+        result = qdrant_client.scroll(
+            collection_name=COLLECTION_NAME,
+            limit=100,
+            with_payload=True,
+            with_vectors=False
+        )
+
+        chapters = set()
+        if result and result[0]:
+            for point in result[0]:
+                chapter = point.payload.get('chapter')
+                if chapter and chapter != "Unknown":
+                    chapters.add(chapter)
+
+        # Additional scroll to get full count if needed
+        offset = result[1]
+        while offset is not None:
+            result = qdrant_client.scroll(
+                collection_name=COLLECTION_NAME,
+                limit=100,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False
+            )
+
+            for point in result[0]:
+                chapter = point.payload.get('chapter')
+                if chapter and chapter != "Unknown":
+                    chapters.add(chapter)
+
+            offset = result[1]
+
+        # Get cache statistics
+        cache_stats = get_cache_stats()
+
+        return {
+            "status": "active",
+            "collection": {
+                "name": COLLECTION_NAME,
+                "total_points": total_points,
+                "total_chapters": len(chapters),
+                "chapters": sorted(list(chapters)),
+                "vectors_count": total_points
+            },
+            "cache": cache_stats,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch ingestion status: {str(e)}")
+
+
+@app.get("/api/performance/metrics")
+async def get_performance_metrics():
+    """Get performance profiling metrics for API endpoints"""
+    try:
+        stats = profiler.get_stats()
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "metrics": stats,
+            "endpoints_tracked": list(stats.keys())
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch performance metrics: {str(e)}")
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
@@ -511,6 +961,56 @@ async def health_check():
         }
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Health check failed: {str(e)}")
+# ============================================================================ 
+# UPSERT ENDPOINT FOR DATA INGESTION
+# ============================================================================
+
+class UpsertRequest(BaseModel):
+    id: str
+    text: str
+    chapter: Optional[str] = None
+    title: Optional[str] = None
+    heading: Optional[str] = None
+    file_path: Optional[str] = None
+
+@app.post("/upsert")
+async def upsert_chunk(request: UpsertRequest):
+    """
+    Endpoint for ingesting text chunks into Qdrant
+    """
+    try:
+        # Initialize Cohere client
+        cohere_client = CohereClient(api_key=os.getenv("COHERE_API_KEY"))
+
+        # Generate embedding using Cohere
+        embedding_response = cohere_client.embed(
+            model=os.getenv("EMBEDDING_MODEL", "embed-english-v3.0"),
+            texts=[request.text]
+        )
+
+        vector = embedding_response.embeddings[0]
+
+        # Upsert into Qdrant
+        qdrant_client.upsert(
+            collection_name=COLLECTION_NAME,
+            points=[
+                models.PointStruct(
+                    id=request.id,
+                    vector=vector,
+                    payload={
+                        "text": request.text,
+                        "chapter": request.chapter or "Unknown",
+                        "title": request.title or "",
+                        "heading": request.heading or "",
+                        "file_path": request.file_path or ""
+                    }
+                )
+            ]
+        )
+        return {"status": "success", "id": request.id}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upsert error: {str(e)}")
 
 
 if __name__ == "__main__":
