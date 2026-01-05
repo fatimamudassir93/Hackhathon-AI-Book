@@ -1,3 +1,6 @@
+# Minimal requirements (fallback if full build fails)
+# Use this if sentence-transformers causes issues: pip install -r requirements-min.txt
+
 # Core Backend
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
@@ -14,12 +17,11 @@ passlib[bcrypt]==1.7.4
 python-jose[cryptography]==3.3.0
 python-multipart==0.0.9
 
-# AI/ML - LLM Providers
+# AI/ML - LLM Providers (without sentence-transformers)
 openai==1.12.0
 groq==0.4.2
 google-generativeai==0.4.1
 cohere==4.56
-sentence-transformers==2.5.1
 qdrant-client==1.8.2
 
 # Utilities
